@@ -1,29 +1,25 @@
-# Use an official Node.js runtime as the base image
-FROM node:hydrogen
+# Use the base image
+FROM ingmapping/tippecanoe
 
-# Install required packages
-RUN apt-get update && \
-    apt-get install -y git build-essential && \
-    rm -rf /var/lib/apt/lists/*
+# Create a directory for input and output data
+# RUN mkdir /data_tiles
 
-# Clone the repository and build Tippecanoe
-RUN git clone https://github.com/mapbox/tippecanoe.git && \
-    cd tippecanoe && \
-    make -j && \
-    make install
+# Set the working directory
+WORKDIR /data_tiles
 
-# Set the working directory in the container
-WORKDIR /app
+# Copy the input.geojson from the host to the container
+COPY input.geojson /data_tiles/input.geojson
 
-COPY example.geojson ./example.geojson
+# Run tippecanoe to generate the mbtiles in a tmp folder
+RUN tippecanoe -o /tmp/output.mbtiles -z22 /data_tiles/input.geojson
 
-# Install tippecanoe
-RUN npm install -g tippecanoe
+# Copy the generated mbtiles from tmp to the output folder
+RUN mv /tmp/output.mbtiles /data_tiles/output.mbtiles
 
-# Create a shell script to run Tippecanoe
-RUN echo "#!/bin/sh\n\
-tippecanoe -zg --full-detail=10 --low-detail=11 --simplification=10 --layer=buildings --output=/app/output/sample.mbtiles --description='Building footprints in the municipality of Hobbiton.' --force --extend-zooms-if-still-dropping -pk -pf ./example.geojson" > run_tippecanoe.sh && \
-    chmod +x run_tippecanoe.sh
+# Define the output folder outside of the container
+VOLUME ["/output"]
 
-# Define the entry point for the container (this is your script)
-ENTRYPOINT ["/app/run_tippecanoe.sh"]
+# Define the entry point script
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+ENTRYPOINT ["/entrypoint.sh"]
